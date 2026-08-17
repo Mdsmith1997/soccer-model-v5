@@ -86,8 +86,9 @@ def settle_row(row, results):
         float(ag) > 0
     )
 
+    # Frozen BTTS ledger stores the official entry price as bet_odds.
     odds = float(
-        row["decimal_odds"]
+        row["bet_odds"]
     )
 
     if btts_yes:
@@ -128,6 +129,17 @@ def main():
         LEDGER_FILE,
         low_memory=False,
     )
+
+    # Settlement text fields may be entirely blank in a new ledger.
+    # Pandas then infers them as float64, which prevents writing
+    # values such as "YES", "NO", "WIN", and "LOSS".
+    for col in [
+        "status",
+        "result",
+        "bet_result",
+    ]:
+        if col in ledger.columns:
+            ledger[col] = ledger[col].astype("object")
 
     results = pd.read_csv(
         RESULTS_FILE,
@@ -190,7 +202,7 @@ def main():
             "home_team",
             "away_team",
             "strategy",
-            "american_odds",
+            "bet_odds",
             "result",
             "bet_result",
             "profit_units",
