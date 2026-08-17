@@ -1,44 +1,182 @@
+from pathlib import Path
+import os
+import shutil
 import subprocess
 import sys
+import tarfile
 import time
 from datetime import datetime, timezone
 
-INTERVAL_SECONDS = 6 * 60 * 60  # every 6 hours
 
-def run_pipeline():
-    print("\n" + "=" * 100)
-    print(
-        "RENDER V5 RUN:",
-        datetime.now(timezone.utc).isoformat()
+ROOT = Path(__file__).resolve().parents[1]
+
+LOCAL_LIVE = ROOT / "data" / "live"
+PERSISTENT_LIVE = Path(
+    os.environ.get(
+        "V5_LIVE_DATA_DIR",
+        "/var/data",
     )
-    print("=" * 100, flush=True)
+)
+
+SEED_ARCHIVE = ROOT / "seed" / "live_seed.tar.gz"
+SEED_MARKER = PERSISTENT_LIVE / ".v5_seed_complete"
+
+INTERVAL_SECONDS = 6 * 60 * 60
+
+
+def prepare_live_storage():
+
+    # Local Mac development continues using the normal
+    # repository data/live directory.
+    if not os.environ.get("RENDER"):
+        print(
+            f"Local mode: using {LOCAL_LIVE}",
+            flush=True,
+        )
+        LOCAL_LIVE.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        return
+
+    print(
+        f"Render mode: persistent live storage = "
+        f"{PERSISTENT_LIVE}",
+        flush=True,
+    )
+
+    PERSISTENT_LIVE.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # Seed the persistent disk only once.
+    if not SEED_MARKER.exists():
+
+        if SEED_ARCHIVE.exists():
+
+            print(
+                "Initializing persistent V5 state "
+                "from live seed...",
+                flush=True,
+            )
+
+            with tarfile.open(
+                SEED_ARCHIVE,
+                "r:gz",
+            ) as tar:
+                tar.extractall(
+                    PERSISTENT_LIVE
+                )
+
+            SEED_MARKER.write_text(
+                datetime.now(
+                    timezone.utc
+                ).isoformat()
+            )
+
+            print(
+                "Persistent V5 state seeded.",
+                flush=True,
+            )
+
+        else:
+            print(
+                "WARNING: No seed archive found. "
+                "Starting persistent live directory empty.",
+                flush=True,
+            )
+
+    else:
+        print(
+            "Existing persistent V5 state found. "
+            "Seed will NOT be reapplied.",
+            flush=True,
+        )
+
+    # Replace data/live with a symlink to Render's disk.
+    LOCAL_LIVE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if LOCAL_LIVE.is_symlink():
+        LOCAL_LIVE.unlink()
+
+    elif LOCAL_LIVE.exists():
+
+        if LOCAL_LIVE.is_dir():
+            shutil.rmtree(
+                LOCAL_LIVE
+            )
+        else:
+            LOCAL_LIVE.unlink()
+
+    LOCAL_LIVE.symlink_to(
+        PERSISTENT_LIVE,
+        target_is_directory=True,
+    )
+
+    print(
+        f"{LOCAL_LIVE} -> {PERSISTENT_LIVE}",
+        flush=True,
+    )
+
+
+def run_command(args, label):
+
+    print(
+        "\n" + "=" * 100,
+        flush=True,
+    )
+    print(
+        label,
+        datetime.now(
+            timezone.utc
+        ).isoformat(),
+        flush=True,
+    )
+    print(
+        "=" * 100,
+        flush=True,
+    )
 
     result = subprocess.run(
+        args,
+        cwd=ROOT,
+    )
+
+    return result.returncode
+
+
+def run_pipeline():
+
+    rc = run_command(
         [
             sys.executable,
             "scripts/run_live_v5.py",
-        ]
+        ],
+        "RUN V5 LIVE PIPELINE",
     )
 
-    if result.returncode != 0:
+    if rc != 0:
         print(
-            f"V5 pipeline failed with exit code "
-            f"{result.returncode}",
+            f"V5 pipeline failed with exit code {rc}",
             flush=True,
         )
         return
 
-    result = subprocess.run(
+    rc = run_command(
         [
             sys.executable,
             "scripts/push_dashboard.py",
-        ]
+        ],
+        "PUSH V5 DASHBOARD",
     )
 
-    if result.returncode != 0:
+    if rc != 0:
         print(
-            f"Dashboard push failed with exit code "
-            f"{result.returncode}",
+            f"Dashboard push failed with exit code {rc}",
             flush=True,
         )
         return
@@ -48,18 +186,32 @@ def run_pipeline():
         flush=True,
     )
 
-while True:
-    try:
-        run_pipeline()
-    except Exception as exc:
+
+def main():
+
+    prepare_live_storage()
+
+    while True:
+
+        try:
+            run_pipeline()
+
+        except Exception as exc:
+            print(
+                f"Worker error: {exc}",
+                flush=True,
+            )
+
         print(
-            f"Worker error: {exc}",
+            f"Sleeping "
+            f"{INTERVAL_SECONDS // 3600} hours...",
             flush=True,
         )
 
-    print(
-        f"Sleeping {INTERVAL_SECONDS // 3600} hours...",
-        flush=True,
-    )
+        time.sleep(
+            INTERVAL_SECONDS
+        )
 
-    time.sleep(INTERVAL_SECONDS)
+
+if __name__ == "__main__":
+    main()
