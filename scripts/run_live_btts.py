@@ -2224,15 +2224,33 @@ if not ODDS_FILE.exists():
     )
 
 
-odds = pd.read_csv(
-    ODDS_FILE,
-    low_memory=False,
-)
+# The odds fetcher can legitimately produce an empty market snapshot
+# when no totals/BTTS prices are returned. An empty file must not crash
+# the live pipeline.
+if ODDS_FILE.stat().st_size <= 1:
+    print(
+        "BTTS market snapshot is empty — no market prices returned."
+    )
+    odds = pd.DataFrame()
+else:
+    try:
+        odds = pd.read_csv(
+            ODDS_FILE,
+            low_memory=False,
+        )
+    except pd.errors.EmptyDataError:
+        print(
+            "BTTS market snapshot contains no readable rows."
+        )
+        odds = pd.DataFrame()
 
 
-market = build_btts_market(
-    odds
-)
+if odds.empty:
+    market = pd.DataFrame()
+else:
+    market = build_btts_market(
+        odds
+    )
 
 
 banner(

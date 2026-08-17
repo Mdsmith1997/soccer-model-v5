@@ -63,10 +63,52 @@ pred = pd.read_csv(
     low_memory=False,
 )
 
-odds = pd.read_csv(
-    ODDS_FILE,
-    low_memory=False,
-)
+# The Odds API can legitimately return no totals markets.
+# An empty snapshot must not crash the live pipeline.
+if not ODDS_FILE.exists() or ODDS_FILE.stat().st_size <= 1:
+    print(
+        "Totals market snapshot is empty — no totals prices returned."
+    )
+    odds = pd.DataFrame(
+        columns=[
+            "market",
+            "point",
+            "decimal_odds",
+            "home_team",
+            "away_team",
+            "league",
+            "bookmaker",
+            "bookmaker_key",
+            "selection",
+            "match_id",
+            "event_id",
+            "sport_key",
+            "commence_time",
+            "snapshot_time",
+        ]
+    )
+else:
+    try:
+        odds = pd.read_csv(
+            ODDS_FILE,
+            low_memory=False,
+        )
+    except pd.errors.EmptyDataError:
+        print(
+            "Totals market snapshot contains no readable rows."
+        )
+        odds = pd.DataFrame(
+            columns=[
+                "market",
+                "point",
+                "decimal_odds",
+                "home_team",
+                "away_team",
+                "league",
+                "bookmaker",
+                "outcome",
+            ]
+        )
 
 
 # ============================================================
