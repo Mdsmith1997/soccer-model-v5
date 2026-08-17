@@ -21,7 +21,7 @@ PERSISTENT_LIVE = Path(
 SEED_ARCHIVE = ROOT / "seed" / "live_seed.tar.gz"
 SEED_MARKER = PERSISTENT_LIVE / ".v5_seed_complete"
 
-INTERVAL_SECONDS = 6 * 60 * 60
+INTERVAL_SECONDS = 1 * 60 * 60
 
 
 def prepare_live_storage():
