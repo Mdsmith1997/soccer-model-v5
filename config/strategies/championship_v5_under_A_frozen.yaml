@@ -1,0 +1,109 @@
+strategy_name: championship_v5_under_A
+status: frozen_forward_test
+
+league: Championship
+market: totals
+selection: Under 2.5
+
+model:
+  version: V5
+  probability: model_p_under
+
+market_probability:
+  method: vig_removed_two_way_market
+  source: Football-Data historical O/U odds
+
+edge:
+  formula: model_p_under - market_p_under
+  threshold: 0.11
+  threshold_status: frozen
+
+bet_rule:
+  action: bet_under_2_5
+  condition: under_edge >= 0.11
+  stake_method: flat_1_unit_for_historical_validation
+
+historical_validation:
+  seasons:
+    - "1920"
+    - "2021"
+    - "2122"
+    - "2223"
+    - "2324"
+    - "2425"
+    - "2526"
+
+  qualifying_bets: 148
+  wins: 73
+  losses: 75
+  profit_units: 5.34
+  historical_roi: 0.0361
+
+  recent_validation:
+    seasons:
+      - "2324"
+      - "2425"
+      - "2526"
+    qualifying_bets: 128
+    profit_units: 8.63
+    roi: 0.0674
+
+  bootstrap:
+    median_roi: 0.0365
+    ci_95_low: -0.1345
+    ci_95_high: 0.2089
+    probability_roi_positive: 0.6595
+
+  risk:
+    max_drawdown_units: -9.34
+    longest_losing_streak: 6
+
+data_quality:
+  market_rows: 3864
+  matched_market_rows: 3864
+  market_match_coverage: 1.0
+
+notes:
+  - "This is the official Championship baseline."
+  - "The original incomplete 33-bet +8.45% result is superseded."
+  - "100% Football-Data market matching was achieved after alias repair."
+  - "Do not add an odds ceiling to Strategy A."
+  - "Do not optimize the 11% threshold using Championship results."
+
+forward_test:
+  mode: paper
+  strategy_changes_allowed: false
+
+  record:
+    - kickoff_time
+    - home_team
+    - away_team
+    - model_p_under
+    - market_p_under
+    - under_edge
+    - under_odds
+    - bookmaker
+    - bet_timestamp
+    - closing_under_odds
+    - closing_market_p_under
+    - clv
+    - result
+    - profit_units
+
+  evaluate:
+    - number_of_bets
+    - win_rate
+    - roi
+    - units
+    - clv
+    - average_clv
+    - clv_positive_rate
+    - max_drawdown
+    - longest_losing_streak
+
+research_guardrails:
+  - "Do not alter the 11% threshold during forward testing."
+  - "Do not retroactively remove high-odds bets."
+  - "Do not add team exclusions."
+  - "Do not optimize odds ranges."
+  - "Any rule modification becomes a new strategy version."

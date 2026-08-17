@@ -1,0 +1,100 @@
+strategy_name: championship_v5_under_B
+status: frozen_research_challenger
+
+league: Championship
+market: totals
+selection: Under 2.5
+
+model:
+  version: V5
+  probability: model_p_under
+
+market_probability:
+  method: vig_removed_two_way_market
+  source: Football-Data historical O/U odds
+
+edge:
+  formula: model_p_under - market_p_under
+  threshold: 0.11
+  threshold_status: frozen
+
+secondary_filter:
+  under_odds_max_exclusive: 2.25
+  condition: under_odds < 2.25
+  origin: discovered_in_championship_historical_analysis
+  validation_status: NOT_INDEPENDENTLY_VALIDATED
+
+bet_rule:
+  action: bet_under_2_5
+  condition:
+    - under_edge >= 0.11
+    - under_odds < 2.25
+
+historical_observation:
+  qualifying_bets: 91
+  wins: 54
+  losses: 37
+  profit_units: 15.46
+  observed_roi: 0.1699
+
+  comparison:
+    under_odds_ge_2_25:
+      qualifying_bets: 57
+      wins: 19
+      losses: 38
+      profit_units: -10.12
+      observed_roi: -0.1775
+
+  warning:
+    - "The 2.25 cutoff was discovered after inspecting Championship historical results."
+    - "The +16.99% historical ROI is hypothesis-generating, not validated expected performance."
+    - "Do not present this ROI as out-of-sample evidence."
+
+cross_league_test:
+  league_one_replication: failed_to_confirm
+  note:
+    - "League One did not independently reproduce a <2.25 advantage."
+    - "Therefore this remains a Championship-specific research hypothesis."
+
+forward_test:
+  mode: paper_challenger
+  strategy_changes_allowed: false
+
+  record:
+    - kickoff_time
+    - home_team
+    - away_team
+    - model_p_under
+    - market_p_under
+    - under_edge
+    - under_odds
+    - bookmaker
+    - bet_timestamp
+    - closing_under_odds
+    - closing_market_p_under
+    - clv
+    - result
+    - profit_units
+
+  evaluate:
+    - number_of_bets
+    - win_rate
+    - roi
+    - units
+    - clv
+    - average_clv
+    - clv_positive_rate
+    - max_drawdown
+    - longest_losing_streak
+
+promotion_rule:
+  - "Do not promote B based on historical Championship results."
+  - "Promotion requires unseen forward evidence."
+  - "Compare B prospectively against Championship A."
+  - "Any change to 2.25 creates a new challenger version."
+
+research_guardrails:
+  - "Do not search 2.20, 2.30, 2.15, etc. for a better historical cutoff."
+  - "Do not change the 11% edge threshold."
+  - "Do not remove losing teams after observing results."
+  - "Do not backfill a better rule from future losses."

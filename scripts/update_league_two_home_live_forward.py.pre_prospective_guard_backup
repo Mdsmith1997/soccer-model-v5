@@ -1,0 +1,585 @@
+from pathlib import Path
+from datetime import datetime, timezone
+import hashlib
+
+import numpy as np
+import pandas as pd
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
+ROOT = Path(__file__).resolve().parents[1]
+
+BOARD_FILE = (
+    ROOT
+    / "data"
+    / "live"
+    / "v5_live_ev_board.csv"
+)
+
+LEDGER_FILE = (
+    ROOT
+    / "data"
+    / "live"
+    / "league_two_home_live_forward.csv"
+)
+
+
+# ============================================================
+# FROZEN STRATEGY
+# ============================================================
+
+LEAGUE = "League Two"
+SELECTION = "HOME"
+
+RAW_EDGE_THRESHOLD = 0.16
+
+REQUIRED_HISTORY = "SAME_LEAGUE"
+
+STAKE_UNITS = 1.0
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def utc_now():
+    return datetime.now(
+        timezone.utc
+    ).isoformat()
+
+
+def safe_float(x):
+    try:
+        x = float(x)
+
+        if np.isfinite(x):
+            return x
+
+    except (TypeError, ValueError):
+        pass
+
+    return np.nan
+
+
+def make_bet_id(row):
+
+    raw = "|".join(
+        [
+            str(row.get("match_id", "")),
+            str(row.get("date", "")),
+            str(row.get("home_team", "")),
+            str(row.get("away_team", "")),
+            "LEAGUE_TWO_HOME_V1",
+        ]
+    )
+
+    return hashlib.sha256(
+        raw.encode("utf-8")
+    ).hexdigest()[:20]
+
+
+# ============================================================
+# LOAD BOARD
+# ============================================================
+
+if not BOARD_FILE.exists():
+    raise FileNotFoundError(
+        f"Missing EV board:\n{BOARD_FILE}"
+    )
+
+board = pd.read_csv(
+    BOARD_FILE,
+    low_memory=False,
+)
+
+required = {
+    "match_id",
+    "date",
+    "league",
+    "home_team",
+    "away_team",
+
+    "odds_matched",
+    "odds_snapshot_time",
+    "odds_commence_time",
+
+    "p_home_v5",
+    "market_p_home",
+
+    "best_home_odds",
+    "best_home_book",
+
+    "home_history_source",
+    "away_history_source",
+}
+
+missing = sorted(
+    required - set(board.columns)
+)
+
+if missing:
+    raise ValueError(
+        "EV board missing required columns:\n"
+        + "\n".join(missing)
+    )
+
+
+# ============================================================
+# NORMALIZE
+# ============================================================
+
+board["league"] = (
+    board["league"]
+    .astype(str)
+    .str.strip()
+)
+
+board["home_history_source"] = (
+    board["home_history_source"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+board["away_history_source"] = (
+    board["away_history_source"]
+    .astype(str)
+    .str.strip()
+    .str.upper()
+)
+
+for c in [
+    "p_home_v5",
+    "market_p_home",
+    "best_home_odds",
+]:
+    board[c] = pd.to_numeric(
+        board[c],
+        errors="coerce",
+    )
+
+board["raw_home_edge"] = (
+    board["p_home_v5"]
+    - board["market_p_home"]
+)
+
+
+# ============================================================
+# LEAGUE TWO ONLY
+# ============================================================
+
+lt = board[
+    board["league"].eq(LEAGUE)
+].copy()
+
+print("=" * 110)
+print("LEAGUE TWO HOME — LIVE FORWARD LOGGER")
+print("=" * 110)
+
+print("\nFrozen rule:")
+print("League Two")
+print("HOME ML")
+print("raw V5 edge >= 16%")
+print("home history = SAME_LEAGUE")
+print("away history = SAME_LEAGUE")
+print("flat 1u")
+print("no odds filter")
+
+print("\nLeague Two games on board:", len(lt))
+
+
+# ============================================================
+# PREMATCH VALIDITY
+# ============================================================
+
+lt["snapshot_dt"] = pd.to_datetime(
+    lt["odds_snapshot_time"],
+    utc=True,
+    errors="coerce",
+)
+
+lt["commence_dt"] = pd.to_datetime(
+    lt["odds_commence_time"],
+    utc=True,
+    errors="coerce",
+)
+
+lt["prematch"] = (
+    lt["snapshot_dt"].notna()
+    & lt["commence_dt"].notna()
+    & (
+        lt["snapshot_dt"]
+        <
+        (
+            lt["commence_dt"]
+            - pd.Timedelta(minutes=1)
+        )
+    )
+)
+
+
+# ============================================================
+# QUALIFICATION FLAGS
+# ============================================================
+
+lt["league_ok"] = True
+
+lt["odds_ok"] = (
+    lt["odds_matched"]
+    .fillna(False)
+    .astype(bool)
+    & lt["best_home_odds"].gt(1.0)
+    & lt["market_p_home"].gt(0)
+    & lt["p_home_v5"].between(0, 1)
+)
+
+lt["history_ok"] = (
+    lt["home_history_source"].eq(
+        REQUIRED_HISTORY
+    )
+    &
+    lt["away_history_source"].eq(
+        REQUIRED_HISTORY
+    )
+)
+
+lt["edge_ok"] = (
+    lt["raw_home_edge"]
+    >= RAW_EDGE_THRESHOLD
+)
+
+lt["qualifies"] = (
+    lt["prematch"]
+    & lt["odds_ok"]
+    & lt["history_ok"]
+    & lt["edge_ok"]
+)
+
+
+# ============================================================
+# DISPLAY EVERY LEAGUE TWO HOME CHECK
+# ============================================================
+
+print("\n" + "-" * 110)
+print("CURRENT LEAGUE TWO HOME CHECK")
+print("-" * 110)
+
+display_cols = [
+    "date",
+    "home_team",
+    "away_team",
+    "p_home_v5",
+    "market_p_home",
+    "raw_home_edge",
+    "best_home_odds",
+    "best_home_book",
+    "home_history_source",
+    "away_history_source",
+    "prematch",
+    "qualifies",
+]
+
+if len(lt):
+
+    print(
+        lt[display_cols]
+        .sort_values(
+            "raw_home_edge",
+            ascending=False,
+        )
+        .to_string(
+            index=False,
+            formatters={
+                "p_home_v5":
+                    lambda x: f"{x:.2%}",
+                "market_p_home":
+                    lambda x: f"{x:.2%}",
+                "raw_home_edge":
+                    lambda x: f"{x:+.2%}",
+                "best_home_odds":
+                    lambda x: f"{x:.2f}",
+            },
+        )
+    )
+
+else:
+    print("No League Two games.")
+
+
+# ============================================================
+# QUALIFIERS
+# ============================================================
+
+q = lt[
+    lt["qualifies"]
+].copy()
+
+print("\n" + "-" * 110)
+print("QUALIFYING SIGNALS")
+print("-" * 110)
+
+if len(q):
+
+    print(
+        q[
+            [
+                "date",
+                "home_team",
+                "away_team",
+                "p_home_v5",
+                "market_p_home",
+                "raw_home_edge",
+                "best_home_odds",
+                "best_home_book",
+            ]
+        ]
+        .to_string(
+            index=False,
+            formatters={
+                "p_home_v5":
+                    lambda x: f"{x:.2%}",
+                "market_p_home":
+                    lambda x: f"{x:.2%}",
+                "raw_home_edge":
+                    lambda x: f"{x:+.2%}",
+                "best_home_odds":
+                    lambda x: f"{x:.2f}",
+            },
+        )
+    )
+
+else:
+    print("NONE")
+
+
+# ============================================================
+# LOAD LEDGER
+# ============================================================
+
+if LEDGER_FILE.exists():
+
+    ledger = pd.read_csv(
+        LEDGER_FILE,
+        low_memory=False,
+    )
+
+else:
+
+    ledger = pd.DataFrame()
+
+
+# Ensure expected columns exist.
+
+columns = [
+    "bet_id",
+    "date",
+    "kickoff",
+    "league",
+    "home_team",
+    "away_team",
+
+    "strategy",
+    "selection",
+    "history_class",
+    "threshold",
+
+    "model_probability",
+    "market_probability",
+    "raw_edge",
+
+    "bet_odds",
+    "stake_units",
+    "sportsbook",
+    "bet_timestamp",
+
+    "closing_odds",
+    "closing_timestamp",
+    "closing_probability",
+    "clv_probability",
+    "clv_percent",
+
+    "home_goals",
+    "away_goals",
+    "result",
+    "win",
+    "profit_units",
+
+    "cumulative_profit",
+    "cumulative_staked",
+    "cumulative_roi",
+
+    "status",
+    "notes",
+]
+
+for c in columns:
+
+    if c not in ledger.columns:
+        ledger[c] = np.nan
+
+ledger = ledger[columns].copy()
+
+
+# ============================================================
+# APPEND FIRST QUALIFYING SIGNAL ONLY
+# ============================================================
+
+existing_ids = set(
+    ledger["bet_id"]
+    .dropna()
+    .astype(str)
+)
+
+new_rows = []
+
+for _, r in q.iterrows():
+
+    bet_id = make_bet_id(r)
+
+    if bet_id in existing_ids:
+        continue
+
+    new_rows.append(
+        {
+            "bet_id": bet_id,
+
+            "date": r["date"],
+
+            "kickoff":
+                r["odds_commence_time"],
+
+            "league": LEAGUE,
+
+            "home_team":
+                r["home_team"],
+
+            "away_team":
+                r["away_team"],
+
+            "strategy":
+                "LEAGUE_TWO_HOME_V1",
+
+            "selection":
+                SELECTION,
+
+            "history_class":
+                "BOTH_SAME_LEAGUE",
+
+            "threshold":
+                RAW_EDGE_THRESHOLD,
+
+            "model_probability":
+                safe_float(
+                    r["p_home_v5"]
+                ),
+
+            "market_probability":
+                safe_float(
+                    r["market_p_home"]
+                ),
+
+            "raw_edge":
+                safe_float(
+                    r["raw_home_edge"]
+                ),
+
+            "bet_odds":
+                safe_float(
+                    r["best_home_odds"]
+                ),
+
+            "stake_units":
+                STAKE_UNITS,
+
+            "sportsbook":
+                r["best_home_book"],
+
+            "bet_timestamp":
+                r["odds_snapshot_time"],
+
+            "status":
+                "OPEN",
+
+            "notes":
+                "First qualifying frozen live-forward signal.",
+        }
+    )
+
+    existing_ids.add(
+        bet_id
+    )
+
+
+# ============================================================
+# SAVE
+# ============================================================
+
+if new_rows:
+
+    ledger = pd.concat(
+        [
+            ledger,
+            pd.DataFrame(new_rows),
+        ],
+        ignore_index=True,
+    )
+
+ledger.to_csv(
+    LEDGER_FILE,
+    index=False,
+)
+
+
+# ============================================================
+# FINAL REPORT
+# ============================================================
+
+print("\n" + "=" * 110)
+print("LEDGER UPDATE")
+print("=" * 110)
+
+print(
+    "Current qualifiers:",
+    len(q),
+)
+
+print(
+    "New signals recorded:",
+    len(new_rows),
+)
+
+print(
+    "Total prospective signals:",
+    len(ledger),
+)
+
+print("\nLedger:")
+print(LEDGER_FILE)
+
+if new_rows:
+
+    print(
+        "\n*** NEW FROZEN SIGNAL(S) RECORDED ***"
+    )
+
+    for r in new_rows:
+
+        print(
+            f"{r['home_team']} vs "
+            f"{r['away_team']} | "
+            f"HOME {r['bet_odds']:.2f} | "
+            f"edge {r['raw_edge']:+.2%} | "
+            f"{r['sportsbook']}"
+        )
+
+else:
+
+    print(
+        "\nNo new qualifying signals "
+        "were added."
+    )
+
+print("\nDONE")

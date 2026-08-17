@@ -1,0 +1,38 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Secrets / local env
+.env
+.env.*
+*.key
+*.pem
+
+# Local IDE
+.vscode/
+.idea/
+
+# Live mutable data
+data/live/
+
+# Logs / temp
+*.log
+tmp/
+
+# Private credentials
+.private/
+
+# Large historical/raw datasets
+data/raw/odds_api/
+
+# Live mutable state
+data/live/
+
+# Secrets
+.private/
+
+# Generated / large model data
+data/processed/

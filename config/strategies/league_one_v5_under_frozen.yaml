@@ -1,0 +1,90 @@
+strategy_name: league_one_v5_under
+status: frozen_forward_test
+
+league: League One
+market: totals
+selection: Under 2.5
+
+model:
+  version: V5
+  probability: model_p_under
+
+market_probability:
+  method: vig_removed_two_way_market
+  source: Football-Data historical O/U odds
+
+edge:
+  formula: model_p_under - market_p_under
+  threshold: 0.11
+  threshold_status: frozen
+
+bet_rule:
+  action: bet_under_2_5
+  condition: under_edge >= 0.11
+  stake_method: flat_1_unit_for_historical_validation
+
+historical_validation:
+  seasons:
+    - "1920"
+    - "2021"
+    - "2122"
+    - "2223"
+    - "2324"
+    - "2425"
+    - "2526"
+
+  qualifying_bets: 91
+  historical_roi: 0.0536
+
+  notes:
+    - "11% threshold was frozen before League One results were inspected."
+    - "Do not optimize threshold using League One historical results."
+    - "Do not add a 2.25 odds ceiling based on Championship research."
+    - "Championship <2.25 odds hypothesis did not independently replicate in League One."
+
+data_quality:
+  prediction_rows: 3747
+  market_rows: 3712
+  valid_ou_market_rows: 3711
+  valid_ou_matched_rows: 3710
+  valid_ou_coverage: 0.9997
+  unmatched_valid_ou_games: 1
+
+forward_test:
+  mode: paper
+  strategy_changes_allowed: false
+
+  record:
+    - kickoff_time
+    - home_team
+    - away_team
+    - model_p_under
+    - market_p_under
+    - under_edge
+    - under_odds
+    - bookmaker
+    - bet_timestamp
+    - closing_under_odds
+    - closing_market_p_under
+    - clv
+    - result
+    - profit_units
+
+  evaluate:
+    - number_of_bets
+    - win_rate
+    - roi
+    - units
+    - clv
+    - average_clv
+    - clv_positive_rate
+    - max_drawdown
+    - longest_losing_streak
+
+research_guardrails:
+  - "Do not alter the 11% threshold during forward testing."
+  - "Do not remove losing odds ranges after observing forward results."
+  - "Do not add team-specific exclusions."
+  - "Do not add season-specific filters."
+  - "Any future rule change becomes a new strategy version."
+  - "A modified strategy must be validated separately."
