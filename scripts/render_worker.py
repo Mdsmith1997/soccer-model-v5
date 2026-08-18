@@ -136,43 +136,39 @@ def prepare_live_storage():
         exist_ok=True,
     )
 
-    if not PROCESSED_SEED_MARKER.exists():
-
-        if not PROCESSED_SEED_ARCHIVE.exists():
-            raise FileNotFoundError(
-                f"Missing processed seed archive: "
-                f"{PROCESSED_SEED_ARCHIVE}"
-            )
-
-        print(
-            "Initializing persistent processed model data...",
-            flush=True,
+    # Processed model inputs are static deployment assets.
+    # Refresh them from the current archive on every Render
+    # process start so newly added dependencies are available.
+    if not PROCESSED_SEED_ARCHIVE.exists():
+        raise FileNotFoundError(
+            f"Missing processed seed archive: "
+            f"{PROCESSED_SEED_ARCHIVE}"
         )
 
-        with tarfile.open(
-            PROCESSED_SEED_ARCHIVE,
-            "r:gz",
-        ) as tar:
-            tar.extractall(
-                PERSISTENT_PROCESSED
-            )
+    print(
+        "Refreshing persistent processed model data "
+        "from deployment seed...",
+        flush=True,
+    )
 
-        PROCESSED_SEED_MARKER.write_text(
-            datetime.now(
-                timezone.utc
-            ).isoformat()
+    with tarfile.open(
+        PROCESSED_SEED_ARCHIVE,
+        "r:gz",
+    ) as tar:
+        tar.extractall(
+            PERSISTENT_PROCESSED
         )
 
-        print(
-            "Persistent processed model data seeded.",
-            flush=True,
-        )
+    PROCESSED_SEED_MARKER.write_text(
+        datetime.now(
+            timezone.utc
+        ).isoformat()
+    )
 
-    else:
-        print(
-            "Existing persistent processed model data found.",
-            flush=True,
-        )
+    print(
+        "Persistent processed model data refreshed.",
+        flush=True,
+    )
 
     if PROCESSED_DIR.is_symlink():
         PROCESSED_DIR.unlink()
