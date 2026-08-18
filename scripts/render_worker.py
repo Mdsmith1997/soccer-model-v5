@@ -21,6 +21,11 @@ PERSISTENT_LIVE = Path(
 SEED_ARCHIVE = ROOT / "seed" / "live_seed.tar.gz"
 SEED_MARKER = PERSISTENT_LIVE / ".v5_seed_complete"
 
+PROCESSED_DIR = ROOT / "data" / "processed"
+PERSISTENT_PROCESSED = PERSISTENT_LIVE / "processed"
+PROCESSED_SEED_ARCHIVE = ROOT / "seed" / "processed_seed.tar.gz"
+PROCESSED_SEED_MARKER = PERSISTENT_PROCESSED / ".v5_processed_seed_complete"
+
 INTERVAL_SECONDS = 1 * 60 * 60
 
 
@@ -119,6 +124,72 @@ def prepare_live_storage():
 
     print(
         f"{LOCAL_LIVE} -> {PERSISTENT_LIVE}",
+        flush=True,
+    )
+
+    # ---------------------------------------------------------
+    # Persistent processed model inputs
+    # ---------------------------------------------------------
+
+    PERSISTENT_PROCESSED.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if not PROCESSED_SEED_MARKER.exists():
+
+        if not PROCESSED_SEED_ARCHIVE.exists():
+            raise FileNotFoundError(
+                f"Missing processed seed archive: "
+                f"{PROCESSED_SEED_ARCHIVE}"
+            )
+
+        print(
+            "Initializing persistent processed model data...",
+            flush=True,
+        )
+
+        with tarfile.open(
+            PROCESSED_SEED_ARCHIVE,
+            "r:gz",
+        ) as tar:
+            tar.extractall(
+                PERSISTENT_PROCESSED
+            )
+
+        PROCESSED_SEED_MARKER.write_text(
+            datetime.now(
+                timezone.utc
+            ).isoformat()
+        )
+
+        print(
+            "Persistent processed model data seeded.",
+            flush=True,
+        )
+
+    else:
+        print(
+            "Existing persistent processed model data found.",
+            flush=True,
+        )
+
+    if PROCESSED_DIR.is_symlink():
+        PROCESSED_DIR.unlink()
+
+    elif PROCESSED_DIR.exists():
+        if PROCESSED_DIR.is_dir():
+            shutil.rmtree(PROCESSED_DIR)
+        else:
+            PROCESSED_DIR.unlink()
+
+    PROCESSED_DIR.symlink_to(
+        PERSISTENT_PROCESSED,
+        target_is_directory=True,
+    )
+
+    print(
+        f"{PROCESSED_DIR} -> {PERSISTENT_PROCESSED}",
         flush=True,
     )
 
