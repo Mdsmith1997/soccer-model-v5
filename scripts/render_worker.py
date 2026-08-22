@@ -170,6 +170,27 @@ def prepare_live_storage():
         flush=True,
     )
 
+    # Copy processed assets shipped with the current Git deployment
+    # onto the persistent disk before replacing data/processed with
+    # the Render symlink. This ensures newly committed model inputs
+    # such as team_game_stats.csv are available immediately.
+    if PROCESSED_DIR.exists() and not PROCESSED_DIR.is_symlink():
+        print(
+            "Syncing deployment processed assets to persistent storage...",
+            flush=True,
+        )
+
+        shutil.copytree(
+            PROCESSED_DIR,
+            PERSISTENT_PROCESSED,
+            dirs_exist_ok=True,
+        )
+
+        print(
+            "Deployment processed assets synced.",
+            flush=True,
+        )
+
     if PROCESSED_DIR.is_symlink():
         PROCESSED_DIR.unlink()
 
