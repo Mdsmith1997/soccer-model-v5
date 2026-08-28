@@ -278,7 +278,8 @@ def add_cfg_features(df):
     definition is explicit.
     """
 
-    x = df.copy()
+    # Render memory optimization: avoid full DataFrame copy
+    x = df
 
 
     # --------------------------------------------------------
@@ -732,7 +733,7 @@ def attach_live_btts_state(live, historical):
         errors="coerce",
     )
 
-    historical = historical.copy()
+    # Render memory optimization: use historical frame in place
 
     historical["date"] = pd.to_datetime(
         historical["date"],
