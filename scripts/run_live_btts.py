@@ -4,6 +4,7 @@ import importlib.util
 import math
 import sys
 
+import gc
 import numpy as np
 import pandas as pd
 
@@ -723,8 +724,23 @@ def attach_live_btts_state(live, historical):
 
     x = live.copy()
 
+    # Render memory optimization: load only BTTS-required transfer columns
+    transfer_cols = [
+        "date",
+        "team",
+        "venue",
+        "final_goal_attack_overall",
+        "final_goal_defense_overall",
+        "final_shot_attack_overall",
+        "final_shot_defense_overall",
+        "final_xg_attack_overall",
+        "final_xg_defense_overall",
+        "adj_goal_attack_overall_games",
+    ]
+
     transfer = pd.read_csv(
         TRANSFER_STORE_FILE,
+        usecols=transfer_cols,
         low_memory=False,
     )
 
@@ -1625,8 +1641,42 @@ if not HISTORICAL_FILE.exists():
     )
 
 
+# Render memory optimization: load only columns required by
+# CFG_0755 training and exact historical league-state attachment.
+historical_cols = [
+    "date",
+    "league",
+    "btts_yes",
+    "home_lambda",
+    "away_lambda",
+
+    "home_final_goal_attack_overall",
+    "home_final_goal_defense_overall",
+    "away_final_goal_attack_overall",
+    "away_final_goal_defense_overall",
+
+    "home_final_xg_attack_overall",
+    "home_final_xg_defense_overall",
+    "away_final_xg_attack_overall",
+    "away_final_xg_defense_overall",
+
+    "home_final_shot_attack_overall",
+    "home_final_shot_defense_overall",
+    "away_final_shot_attack_overall",
+    "away_final_shot_defense_overall",
+
+    "lg_home_goals",
+    "lg_away_goals",
+    "lg_home_xg",
+    "lg_away_xg",
+
+    "home_adj_goal_attack_overall_games",
+    "away_adj_goal_attack_overall_games",
+]
+
 hist = pd.read_csv(
     HISTORICAL_FILE,
+    usecols=historical_cols,
     low_memory=False,
 )
 
@@ -1702,22 +1752,41 @@ print(
 model = build_model()
 
 
+# Render memory optimization: avoid redundant training DataFrame copy
 X_train = hist[
     CFG_FEATURES
     +
     ["league"]
-].copy()
+]
 
 
 y_train = hist[
     "btts_yes"
-].copy()
+]
 
 
 model.fit(
     X_train,
     y_train,
 )
+
+# Training views are no longer needed after fitting.
+del X_train, y_train
+
+# Render memory optimization:
+# after model fitting, live state attachment only needs the
+# leakage-safe historical league xG baseline.
+hist = hist[
+    [
+        "date",
+        "league",
+        "lg_home_xg",
+        "lg_away_xg",
+    ]
+].copy()
+
+# Release unreachable training/derived objects before live processing.
+gc.collect()
 
 
 print(
