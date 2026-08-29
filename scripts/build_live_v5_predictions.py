@@ -1508,11 +1508,6 @@ def load_footystats_transfer_state(
             FOOTYSTATS_TRANSFER_FILE
         )
 
-    df = pd.read_csv(
-        FOOTYSTATS_TRANSFER_FILE,
-        low_memory=False,
-    )
-
     required = [
         "date",
         "team",
@@ -1527,6 +1522,14 @@ def load_footystats_transfer_state(
         "adj_shot_attack_perf",
         "adj_shot_defense_perf",
     ]
+
+    # Load only the columns required to reconstruct the
+    # transferred team's frozen V5 state.
+    df = pd.read_csv(
+        FOOTYSTATS_TRANSFER_FILE,
+        usecols=required,
+        low_memory=False,
+    )
 
     missing = [
         col
