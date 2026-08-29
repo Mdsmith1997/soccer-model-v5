@@ -15,7 +15,6 @@ HISTORY_FILE = PROCESSED / "footystats_multileague_history.csv"
 FIXTURES_FILE = LIVE / "upcoming_fixtures.csv"
 
 OUT = LIVE / "v5_live_predictions_footystats.csv"
-OUT_PAPER = LIVE / "v5_live_predictions_core.csv"
 OUT_AUDIT = LIVE / "v5_live_predictions_footystats_audit.csv"
 
 GOAL_WEIGHT = 0.09
@@ -1309,7 +1308,6 @@ def main():
     LIVE.mkdir(parents=True, exist_ok=True)
 
     pred.to_csv(OUT, index=False)
-    pred.to_csv(OUT_PAPER, index=False)
     audit_df.to_csv(OUT_AUDIT, index=False)
 
     scored = (
@@ -1385,7 +1383,6 @@ def main():
 
     print()
     print("FootyStats predictions:", OUT)
-    print("Paper-live input:", OUT_PAPER)
     print("Audit:", OUT_AUDIT)
     print()
     print(

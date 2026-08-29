@@ -1,6 +1,8 @@
 from pathlib import Path
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+
 
 ROOT = Path(__file__).resolve().parents[1]
 LIVE = ROOT / "data" / "live"
@@ -8,10 +10,6 @@ LIVE = ROOT / "data" / "live"
 CORE = LIVE / "v5_live_predictions_core.csv"
 FOOTYSTATS = LIVE / "v5_live_predictions_footystats.csv"
 OUT = LIVE / "v5_live_predictions_master.csv"
-
-EXPECTED_CORE = 19
-EXPECTED_FOOTYSTATS = 130
-EXPECTED_TOTAL = 149
 
 REQUIRED = [
     "match_id",
@@ -27,7 +25,7 @@ REQUIRED = [
 ]
 
 
-def validate_source(df, name, expected_rows):
+def validate_source(df, name):
 
     print()
     print("=" * 100)
@@ -36,14 +34,14 @@ def validate_source(df, name, expected_rows):
 
     print("Rows:", len(df))
 
-    if len(df) != expected_rows:
+    if df.empty:
         raise ValueError(
-            f"{name}: expected {expected_rows} rows, "
-            f"found {len(df)}"
+            f"{name}: source is empty"
         )
 
     missing = [
-        col for col in REQUIRED
+        col
+        for col in REQUIRED
         if col not in df.columns
     ]
 
@@ -178,13 +176,11 @@ def main():
     core = validate_source(
         core,
         "CORE V5",
-        EXPECTED_CORE,
     )
 
     footystats = validate_source(
         footystats,
         "FOOTYSTATS V5",
-        EXPECTED_FOOTYSTATS,
     )
 
     core["prediction_provider"] = "CORE_V5"
@@ -212,9 +208,15 @@ def main():
         ignore_index=True,
     )
 
-    if len(master) != EXPECTED_TOTAL:
+    expected_total = (
+        len(core)
+        +
+        len(footystats)
+    )
+
+    if len(master) != expected_total:
         raise ValueError(
-            f"Expected {EXPECTED_TOTAL} master rows; "
+            f"Expected {expected_total} master rows; "
             f"found {len(master)}"
         )
 
@@ -260,6 +262,11 @@ def main():
         master["date"],
         errors="coerce",
     )
+
+    if master["date"].isna().any():
+        raise ValueError(
+            "Master contains invalid dates."
+        )
 
     master = (
         master
@@ -307,7 +314,6 @@ def main():
     )
 
     print()
-    print("89 / 89 fixtures ✅")
     print("No duplicate match IDs ✅")
     print("No missing core probabilities ✅")
     print("Probability sums validated ✅")

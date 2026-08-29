@@ -44,8 +44,16 @@ PIPELINE = [
         "build_live_multileague_fixtures.py",
     ),
     (
-        "BUILD LIVE V5 PREDICTIONS",
+        "BUILD LIVE CORE V5 PREDICTIONS",
+        "build_live_v5_predictions.py",
+    ),
+    (
+        "BUILD LIVE FOOTYSTATS V5 PREDICTIONS",
         "build_live_multileague_v5_predictions.py",
+    ),
+    (
+        "BUILD LIVE V5 MASTER BOARD",
+        "build_live_v5_master.py",
     ),
     (
         "BUILD LIVE FROZEN BTTS BOARD",

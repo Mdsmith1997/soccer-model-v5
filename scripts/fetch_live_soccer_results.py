@@ -85,6 +85,41 @@ for league, info in TARGET_LEAGUES.items():
 
 df = pd.DataFrame(rows)
 
+# ------------------------------------------------------------
+# Preserve previously fetched results/history.
+#
+# The Odds API scores endpoint only returns a limited lookback.
+# Without this merge, older completed matches disappear from
+# soccer_results.csv and any still-open ledger row can no longer
+# be settled automatically.
+# ------------------------------------------------------------
+
+if OUT.exists():
+    previous = pd.read_csv(
+        OUT,
+        low_memory=False,
+    )
+
+    if not previous.empty:
+        df = pd.concat(
+            [
+                previous,
+                df,
+            ],
+            ignore_index=True,
+            sort=False,
+        )
+
+        if "event_id" in df.columns:
+            df = (
+                df
+                .drop_duplicates(
+                    subset=["event_id"],
+                    keep="last",
+                )
+                .reset_index(drop=True)
+            )
+
 df.to_csv(
     OUT,
     index=False,

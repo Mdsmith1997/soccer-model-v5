@@ -3489,6 +3489,39 @@ def build_predictions(
         2
     ]
 
+    # --------------------------------------------------------
+    # O/U 2.5 probabilities
+    #
+    # Independent Poisson home/away goals imply total goals
+    # are Poisson with lambda = home_lambda + away_lambda.
+    # These use the same final frozen V5 deployment lambdas
+    # as the 1X2 probabilities above.
+    # --------------------------------------------------------
+
+    total_lambda = (
+        output["home_lambda_v5"]
+        +
+        output["away_lambda_v5"]
+    )
+
+    output["p_under_2_5_v5"] = (
+        np.exp(-total_lambda)
+        *
+        (
+            1.0
+            +
+            total_lambda
+            +
+            (total_lambda ** 2) / 2.0
+        )
+    )
+
+    output["p_over_2_5_v5"] = (
+        1.0
+        -
+        output["p_under_2_5_v5"]
+    )
+
     # ========================================================
     # TRANSITION AUDIT METADATA
     # ========================================================
@@ -3640,6 +3673,9 @@ def build_predictions(
         "p_home_v5",
         "p_draw_v5",
         "p_away_v5",
+
+        "p_over_2_5_v5",
+        "p_under_2_5_v5",
     ]
 
     if output[

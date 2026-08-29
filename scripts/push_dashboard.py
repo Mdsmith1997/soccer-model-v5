@@ -64,13 +64,35 @@ captured_count = len(
     )
 )
 
-unavailable_count = len(
-    re.findall(
-        r"MODEL UNAVAILABLE",
-        board,
-        re.I,
-    )
+unavailable_count = 0
+
+coverage_match = re.search(
+    r"1X2 PRICE COVERAGE(.*?)(?:BTTS SPECIALIST PRICE COVERAGE|\\Z)",
+    board,
+    re.I | re.S,
 )
+
+if coverage_match:
+    unavailable_lines = [
+        line
+        for line in coverage_match.group(1).splitlines()
+        if "MODEL UNAVAILABLE" in line.upper()
+    ]
+
+    excluded_leagues = {
+        "Denmark Superliga",
+        "Liga MX",
+    }
+
+    unresolved_lines = []
+
+    for line in unavailable_lines:
+        league = line.split("|", 1)[0].strip()
+
+        if league not in excluded_leagues:
+            unresolved_lines.append(line)
+
+    unavailable_count = len(unresolved_lines)
 
 payload = {
     "token": TOKEN,
