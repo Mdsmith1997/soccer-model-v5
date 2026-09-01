@@ -34,11 +34,6 @@ def validate_source(df, name):
 
     print("Rows:", len(df))
 
-    if df.empty:
-        raise ValueError(
-            f"{name}: source is empty"
-        )
-
     missing = [
         col
         for col in REQUIRED
@@ -49,6 +44,13 @@ def validate_source(df, name):
         raise ValueError(
             f"{name}: missing columns: {missing}"
         )
+
+    # A provider may legitimately have zero fixtures in the current
+    # live window. Accept a schema-valid empty source so the other
+    # provider can still build the Master board.
+    if df.empty:
+        print("Validation: PASS — schema-valid empty source ✅")
+        return df
 
     if df["match_id"].isna().any():
         raise ValueError(

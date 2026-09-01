@@ -788,6 +788,45 @@ def run_script(
 
         return False
 
+    # Core V5 only supports Premier League and Bundesliga.
+    # A live window can legitimately contain zero core fixtures while
+    # FootyStats still has fixtures to score. In that case, skip Core
+    # instead of stopping the entire live pipeline.
+    if filename == "build_live_v5_predictions.py":
+        fixtures_file = LIVE / "upcoming_fixtures.csv"
+
+        if fixtures_file.exists():
+            fixtures = pd.read_csv(fixtures_file, low_memory=False)
+            core_leagues = {"Premier League", "Bundesliga"}
+
+            if (
+                "league" in fixtures.columns
+                and not fixtures["league"].isin(core_leagues).any()
+            ):
+                # Clear any previous Core predictions so Master cannot
+                # ingest stale fixtures from an earlier live window.
+                core_output = LIVE / "v5_live_predictions_core.csv"
+
+                if core_output.exists():
+                    stale_core = pd.read_csv(
+                        core_output,
+                        low_memory=False,
+                    )
+                    stale_core.iloc[0:0].to_csv(
+                        core_output,
+                        index=False,
+                    )
+                    print(
+                        "Cleared stale Core prediction rows: "
+                        f"{len(stale_core)}"
+                    )
+
+                print(
+                    "SKIPPED — no Premier League or Bundesliga "
+                    "fixtures in current live window."
+                )
+                return True
+
     result = subprocess.run(
         [
             sys.executable,
