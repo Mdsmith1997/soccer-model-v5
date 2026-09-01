@@ -780,9 +780,6 @@ def main():
     official_bets = build_official_bets()
     leans = build_leans()
 
-    # No authoritative production lean definition yet.
-    leans = []
-
     manual_count = len(
         re.findall(
             r"MANUAL .*?PRICE CHECK",
