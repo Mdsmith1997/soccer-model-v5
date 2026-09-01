@@ -18,6 +18,8 @@ TOKEN = os.environ.get("V5_DASHBOARD_TOKEN")
 LEDGER_FILE = LIVE / "v5_live_bet_ledger.csv"
 BTTS_FILE = LIVE / "btts_live_predictions.csv"
 TOTALS_FILE = LIVE / "v5_live_totals_ev_board.csv"
+EV_FILE = LIVE / "v5_live_ev_board.csv"
+LEAN_FLOOR = 0.02
 
 BTTS_SPECIALISTS = {
     "Swiss Super League": 0.06,
@@ -427,6 +429,319 @@ def build_official_bets():
     return official
 
 
+
+def build_leans():
+    """Display-only positive-edge signals below cemented bet thresholds."""
+
+    leans = []
+    window_start, window_end = live_window()
+
+    # ========================================================
+    # 1X2 LEANS
+    # ========================================================
+    if EV_FILE.exists():
+        lx = pd.read_csv(EV_FILE, low_memory=False)
+
+        if "odds_commence_time" in lx.columns:
+            lx["_kickoff"] = pd.to_datetime(
+                lx["odds_commence_time"],
+                utc=True,
+                errors="coerce",
+            ).dt.tz_convert("America/Detroit")
+
+            lx = lx[
+                lx["_kickoff"].ge(window_start)
+                & lx["_kickoff"].le(window_end)
+            ].copy()
+
+        for side in ["HOME", "AWAY"]:
+            edge_col = f"{side.lower()}_edge"
+            odds_col = f"best_{side.lower()}_odds"
+            book_col = f"best_{side.lower()}_book"
+
+            if edge_col not in lx.columns:
+                continue
+
+            lx[edge_col] = pd.to_numeric(
+                lx[edge_col],
+                errors="coerce",
+            )
+
+            if odds_col in lx.columns:
+                lx[odds_col] = pd.to_numeric(
+                    lx[odds_col],
+                    errors="coerce",
+                )
+
+            for _, r in lx.iterrows():
+                edge = r.get(edge_col)
+
+                if pd.isna(edge):
+                    continue
+
+                # Current cemented 1X2 threshold.
+                threshold = 0.16
+
+                if not (LEAN_FLOOR <= edge < threshold):
+                    continue
+
+                kickoff = r.get("_kickoff")
+
+                leans.append({
+                    "match_id": str(r.get("match_id", "")),
+                    "commence_time": iso_time(kickoff),
+                    "league": str(r.get("league", "")),
+                    "home_team": str(r.get("home_team", "")),
+                    "away_team": str(r.get("away_team", "")),
+                    "market": "1X2",
+                    "selection": side,
+                    "odds": decimal_to_american(r.get(odds_col)),
+                    "book": str(r.get(book_col, "")),
+                    "edge_pct": round(float(edge) * 100, 2),
+                    "trigger_pct": round(threshold * 100, 2),
+                    "difference_pp": round(
+                        (float(edge) - threshold) * 100,
+                        2,
+                    ),
+                    "signal_type": "LEAN",
+                })
+
+    # ========================================================
+    # BTTS YES LEANS — CURRENT CEMENTED SPECIALISTS ONLY
+    # ========================================================
+    if BTTS_FILE.exists():
+        lb = pd.read_csv(BTTS_FILE, low_memory=False)
+
+        if "commence_time" in lb.columns:
+            lb["_kickoff"] = pd.to_datetime(
+                lb["commence_time"],
+                utc=True,
+                errors="coerce",
+            ).dt.tz_convert("America/Detroit")
+
+            lb = lb[
+                lb["_kickoff"].ge(window_start)
+                & lb["_kickoff"].le(window_end)
+            ].copy()
+
+        if "yes_edge" in lb.columns:
+            lb["yes_edge"] = pd.to_numeric(
+                lb["yes_edge"],
+                errors="coerce",
+            )
+
+        if "yes_odds" in lb.columns:
+            lb["yes_odds"] = pd.to_numeric(
+                lb["yes_odds"],
+                errors="coerce",
+            )
+
+        candidates = []
+
+        for _, r in lb.iterrows():
+            league = str(r.get("league_market", ""))
+
+            if league not in BTTS_SPECIALISTS:
+                continue
+
+            edge = r.get("yes_edge")
+            threshold = BTTS_SPECIALISTS[league]
+
+            if pd.isna(edge):
+                continue
+
+            if not (LEAN_FLOOR <= edge < threshold):
+                continue
+
+            candidates.append({
+                "match_id": str(r.get("match_id", "")),
+                "commence_time": iso_time(r.get("_kickoff")),
+                "league": league,
+                "home_team": str(r.get("home_team_market", "")),
+                "away_team": str(r.get("away_team_market", "")),
+                "market": "BTTS",
+                "selection": "YES",
+                "odds": decimal_to_american(r.get("yes_odds")),
+                "book": str(r.get("bookmaker", "")),
+                "edge_pct": round(float(edge) * 100, 2),
+                "trigger_pct": round(threshold * 100, 2),
+                "difference_pp": round(
+                    (float(edge) - threshold) * 100,
+                    2,
+                ),
+                "signal_type": "LEAN",
+                "_decimal_odds": number(r.get("yes_odds")),
+            })
+
+        # Same old behavior: one best-price row per match/selection.
+        candidates.sort(
+            key=lambda x: (
+                x["match_id"],
+                -(x["_decimal_odds"] or 0),
+            )
+        )
+
+        seen = set()
+
+        for row in candidates:
+            key = (
+                row["league"],
+                row["home_team"],
+                row["away_team"],
+                row["selection"],
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            row.pop("_decimal_odds", None)
+            leans.append(row)
+
+    # ========================================================
+    # O/U 2.5 LEANS — CURRENT CEMENTED SPECIALISTS ONLY
+    # ========================================================
+    if TOTALS_FILE.exists():
+        lt = pd.read_csv(TOTALS_FILE, low_memory=False)
+
+        if "edge" in lt.columns:
+            lt["edge"] = pd.to_numeric(
+                lt["edge"],
+                errors="coerce",
+            )
+
+        if "decimal_odds" in lt.columns:
+            lt["decimal_odds"] = pd.to_numeric(
+                lt["decimal_odds"],
+                errors="coerce",
+            )
+
+        # Preserve current totals date-window behavior.
+        if "commence_time" in lt.columns:
+            lt["_kickoff"] = pd.to_datetime(
+                lt["commence_time"],
+                utc=True,
+                errors="coerce",
+            ).dt.tz_convert("America/Detroit")
+
+            lt = lt[
+                lt["_kickoff"].ge(window_start)
+                & lt["_kickoff"].le(window_end)
+            ].copy()
+        else:
+            today = window_start.date()
+            allowed_dates = {
+                str(today + pd.Timedelta(days=i))
+                for i in range(4)
+            }
+
+            if "date" in lt.columns:
+                lt = lt[
+                    lt["date"].astype(str).isin(allowed_dates)
+                ].copy()
+
+        candidates = []
+
+        for _, r in lt.iterrows():
+            league = str(r.get("league", ""))
+            bet = str(r.get("bet", ""))
+
+            if "Over" in bet:
+                side = "OVER"
+            elif "Under" in bet:
+                side = "UNDER"
+            else:
+                continue
+
+            threshold = TOTALS_SPECIALISTS.get((league, side))
+
+            if threshold is None:
+                continue
+
+            edge = r.get("edge")
+
+            if pd.isna(edge):
+                continue
+
+            # Totals edge is stored in percentage points.
+            threshold_pct = threshold * 100
+
+            if not (
+                edge >= LEAN_FLOOR * 100
+                and edge < threshold_pct
+            ):
+                continue
+
+            candidates.append({
+                "match_id": str(r.get("match_id", "")),
+                "commence_time": iso_time(r.get("_kickoff")),
+                "league": league,
+                "home_team": str(r.get("home_team", "")),
+                "away_team": str(r.get("away_team", "")),
+                "market": "O/U 2.5",
+                "selection": side,
+                "odds": decimal_to_american(r.get("decimal_odds")),
+                "book": str(r.get("bookmaker", "")),
+                "edge_pct": round(float(edge), 2),
+                "trigger_pct": round(threshold_pct, 2),
+                "difference_pp": round(
+                    float(edge) - threshold_pct,
+                    2,
+                ),
+                "signal_type": "LEAN",
+                "_decimal_odds": number(r.get("decimal_odds")),
+            })
+
+        candidates.sort(
+            key=lambda x: (
+                x["match_id"],
+                x["selection"],
+                -(x["_decimal_odds"] or 0),
+            )
+        )
+
+        seen = set()
+
+        for row in candidates:
+            key = (
+                row["league"],
+                row["home_team"],
+                row["away_team"],
+                row["selection"],
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            row.pop("_decimal_odds", None)
+            leans.append(row)
+
+    # Final dedupe.
+    unique = []
+    seen = set()
+
+    for row in sorted(
+        leans,
+        key=lambda x: x.get("edge_pct", 0),
+        reverse=True,
+    ):
+        key = (
+            row.get("league"),
+            row.get("home_team"),
+            row.get("away_team"),
+            row.get("market"),
+            row.get("selection"),
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append(row)
+
+    return unique
+
 def main():
     if not URL:
         raise RuntimeError(
@@ -463,6 +778,7 @@ def main():
         )
 
     official_bets = build_official_bets()
+    leans = build_leans()
 
     # No authoritative production lean definition yet.
     leans = []
