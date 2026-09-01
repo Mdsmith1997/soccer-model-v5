@@ -1738,6 +1738,12 @@ def fetch_btts(
             f"{event.away_team}"
         )
 
+        btts_regions_text = (
+            "uk"
+            if event.sport_key == "soccer_turkey_super_league"
+            else regions_text
+        )
+
         try:
 
             data = api_get(
@@ -1750,7 +1756,7 @@ def fetch_btts(
                 ),
                 params={
                     "regions":
-                        regions_text,
+                        btts_regions_text,
 
                     "markets":
                         "btts",
