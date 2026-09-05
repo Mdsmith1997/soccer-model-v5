@@ -780,6 +780,64 @@ def main():
     official_bets = build_official_bets()
     leans = build_leans()
 
+    # Actual wagering performance: $60 start, flat $20 per unit.
+    starting_bankroll = 60.0
+    dollars_per_unit = 20.0
+
+    performance = {
+        "starting_bankroll": starting_bankroll,
+        "unit_size": dollars_per_unit,
+        "settled_bets": 0,
+        "wins": 0,
+        "losses": 0,
+        "record": "0-0",
+        "net_units": 0.0,
+        "total_staked": 0.0,
+        "net_profit": 0.0,
+        "roi_pct": 0.0,
+        "current_bankroll": starting_bankroll,
+    }
+
+    if LEDGER_FILE.exists():
+        perf = pd.read_csv(LEDGER_FILE, low_memory=False)
+
+        if "status" in perf.columns and "profit_units" in perf.columns:
+            perf = perf[
+                perf["status"].astype(str).str.upper().eq("SETTLED")
+            ].copy()
+
+            profit = pd.to_numeric(
+                perf["profit_units"],
+                errors="coerce",
+            ).dropna()
+
+            net_units = float(profit.sum())
+            wins = int((profit > 0).sum())
+            losses = int((profit < 0).sum())
+            settled_bets = int(len(profit))
+            total_staked = settled_bets * dollars_per_unit
+            net_profit = net_units * dollars_per_unit
+            current_bankroll = starting_bankroll + net_profit
+            roi_pct = (
+                (net_profit / total_staked) * 100.0
+                if total_staked
+                else 0.0
+            )
+
+            performance = {
+                "starting_bankroll": starting_bankroll,
+                "unit_size": dollars_per_unit,
+                "settled_bets": settled_bets,
+                "wins": wins,
+                "losses": losses,
+                "record": f"{wins}-{losses}",
+                "net_units": round(net_units, 2),
+                "total_staked": round(total_staked, 2),
+                "net_profit": round(net_profit, 2),
+                "roi_pct": round(roi_pct, 2),
+                "current_bankroll": round(current_bankroll, 2),
+            }
+
     manual_count = len(
         re.findall(
             r"MANUAL .*?PRICE CHECK",
@@ -830,6 +888,7 @@ def main():
             "window_hours": 72,
             "official_bets": official_bets,
             "leans": leans,
+            "performance": performance,
             "official_count": len(official_bets),
             "manual_count": manual_count,
             "captured_count": captured_count,
@@ -844,6 +903,14 @@ def main():
     print("=" * 70)
     print("Official plays:", len(official_bets))
     print("Leans:", len(leans))
+    print(
+        "Performance:",
+        performance["record"],
+        f'{performance["net_units"]:+.2f}u',
+        f'${performance["net_profit"]:+.2f}',
+        f'bankroll=${performance["current_bankroll"]:.2f}',
+        f'ROI={performance["roi_pct"]:.2f}%',
+    )
     print("Manual checks:", manual_count)
     print("Prices captured:", captured_count)
     print("Model unavailable:", unavailable_count)
