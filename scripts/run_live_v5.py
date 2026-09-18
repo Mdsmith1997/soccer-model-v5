@@ -99,6 +99,10 @@ PIPELINE = [
         "BACKFILL 1X2 LEDGER KICKOFF TIMES",
         "backfill_v5_ledger_commence_times.py",
     ),
+    (
+        "FREEZE V5 1X2 RESEARCH LEANS",
+        "update_live_v5_lean_ledger.py",
+    ),
 
     # ========================================================
     # TOTALS
@@ -133,6 +137,10 @@ PIPELINE = [
     (
         "SETTLE 1X2 MODEL BETS",
         "settle_live_v5_bets.py",
+    ),
+    (
+        "SETTLE V5 1X2 RESEARCH LEANS",
+        "settle_live_v5_leans.py",
     ),
     (
         "SETTLE BTTS SPECIALIST MODEL BETS",
