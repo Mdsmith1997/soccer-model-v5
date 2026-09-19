@@ -4,8 +4,10 @@ import csv
 import math
 from pathlib import Path
 
-LEAN_FILE = Path("/var/data/soccer/v5_live_lean_ledger.csv")
-RESULTS_FILE = Path.cwd() / "soccer" / "data" / "live" / "soccer_results.csv"
+ROOT = Path(__file__).resolve().parents[1]
+LIVE = ROOT / "data" / "live"
+LEAN_FILE = LIVE / "v5_live_lean_ledger.csv"
+RESULTS_FILE = LIVE / "soccer_results.csv"
 
 
 def clean(v):

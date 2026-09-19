@@ -5,8 +5,8 @@ import os
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] if "soccer/scripts" in str(Path(__file__).resolve()) else Path.cwd() / "soccer"
-LIVE = Path("/var/data/soccer")
+ROOT = Path(__file__).resolve().parents[1]
+LIVE = ROOT / "data" / "live"
 
 EV_FILE = LIVE / "v5_live_ev_board.csv"
 OFFICIAL_FILE = LIVE / "v5_live_bet_ledger.csv"
